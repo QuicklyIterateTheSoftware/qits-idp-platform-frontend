@@ -28,11 +28,12 @@ import { NotFound } from './not-found/not-found';
  * almost no code. Where a sibling explorer's two views sit on one stack of shared table components
  * — spa-mirror says so in its own routes, and loads both eagerly — these do not.
  *
- * **The `'' → clients` redirect is provisional.** Bare `/idp/` should land on whatever the visitor
- * is: a sign-in form when nobody is, an administrative home when someone is. Neither answer can be
- * given until a login flow exists to ask the question, so until then the door opens on the one page
- * that has something real behind it. Expect this line to change, and change it when the flow lands
- * rather than growing a guard around it now.
+ * **The `'' → clients` redirect is still provisional.** Bare `/idp/` should land on whatever the
+ * visitor is: a sign-in form when nobody is, an administrative home when someone is. Sessions exist
+ * now, so the question can be asked — but it is not this table's to answer. The edge is what refuses
+ * an anonymous navigation, and it does so by sending the browser to `/idp/login?redirect=…` before
+ * this route table is consulted at all. A guard here would be a second, weaker copy of that
+ * decision. Change this line when the edge's gate is proven, not before.
  *
  * The `**` route sits inside the layout: `/idp/` is a segment this application owns outright, so an
  * unknown URL under it is an ordinary 404 and is drawn with the chrome around it.

@@ -1,19 +1,307 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideLocationMocks } from '@angular/common/testing';
 import { TestBed } from '@angular/core/testing';
-import { LoginPage } from './login-page';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { routes } from '../app.routes';
+import { AUTH_BROWSER, type AuthBrowser } from '../auth/browser';
 
 /**
- * What is asserted is mostly an absence, and that is the point of the file. The page's whole
- * promise today is that it takes no credential — so the spec that would catch a regression is the
- * one that fails the moment an input appears without the backend flow behind it.
+ * The sign-in page, driven through the router so the `?redirect=` parameter is a real one.
+ *
+ * Everything the page touches outside itself is either an `HttpTestingController` request or the
+ * `AUTH_BROWSER` token — no module mock, no stubbed global. That is deliberate beyond tidiness:
+ * vitest's registry is shared across files, so a module mock here would be an ordering hazard for
+ * every other spec in the repository, and `window.location.assign` cannot be spied under jsdom at
+ * all.
  */
 describe('LoginPage', () => {
-  it('names itself and offers no field to type a credential into', async () => {
-    const fixture = TestBed.createComponent(LoginPage);
-    await fixture.whenStable();
+  let http: HttpTestingController;
+  let harness: RouterTestingHarness;
 
-    const page = fixture.nativeElement as HTMLElement;
-    expect(page.querySelector('h1')?.textContent).toContain('Sign in');
-    expect(page.querySelector('input')).toBeNull();
-    expect(page.querySelector('form')).toBeNull();
+  /** What the fake browser was asked to do. Reset per test by `beforeEach`. */
+  let ceremonies: PublicKeyCredentialRequestOptions[];
+  let assigned: string[];
+
+  const SESSION = {
+    userId: '3f9b3f1e-0000-4000-8000-000000000001',
+    username: 'alice',
+    roles: ['qits:admin'],
+    expiresAt: '2026-08-15T06:00:00Z',
+  };
+
+  /** A credential as a real authenticator hands one back: strings and `ArrayBuffer`s. */
+  const SIGNED = {
+    id: 'credential-id',
+    rawId: new Uint8Array([1, 2, 3]).buffer,
+    type: 'public-key',
+    response: {
+      clientDataJSON: new Uint8Array([4, 5, 6]).buffer,
+      authenticatorData: new Uint8Array([7, 8, 9]).buffer,
+      signature: new Uint8Array([10, 11, 12]).buffer,
+      userHandle: null,
+    },
+  } as unknown as Credential;
+
+  /** A browsing context that can run a ceremony, and answers it with `SIGNED`. */
+  function capable(): AuthBrowser {
+    return {
+      secureContext: true,
+      credentials: {
+        get: (options?: CredentialRequestOptions) => {
+          if (options?.publicKey) ceremonies.push(options.publicKey);
+          return Promise.resolve(SIGNED);
+        },
+        create: () => Promise.resolve(null),
+      } as unknown as CredentialsContainer,
+      assign: (url: string) => assigned.push(url),
+    };
+  }
+
+  /** The raw-IP route: no secure context, so no `navigator.credentials` at all. */
+  function insecure(): AuthBrowser {
+    return { secureContext: false, credentials: null, assign: (url) => assigned.push(url) };
+  }
+
+  function configure(browser: AuthBrowser): void {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        provideLocationMocks(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AUTH_BROWSER, useValue: browser },
+      ],
+    });
+    http = TestBed.inject(HttpTestingController);
+  }
+
+  async function open(url = '/login'): Promise<void> {
+    harness = await RouterTestingHarness.create(url);
+    await settle();
+  }
+
+  async function settle(): Promise<void> {
+    for (let round = 0; round < 6; round += 1) {
+      await Promise.resolve();
+      await harness.fixture.whenStable();
+    }
+  }
+
+  function page(): HTMLElement {
+    return harness.fixture.nativeElement as HTMLElement;
+  }
+
+  function buttons(): HTMLButtonElement[] {
+    return Array.from(page().querySelectorAll('button'));
+  }
+
+  async function type(selector: string, value: string): Promise<void> {
+    const input = page().querySelector<HTMLInputElement>(selector);
+    expect(input, `no input matching ${selector}`).toBeTruthy();
+    if (input) {
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    await settle();
+  }
+
+  async function press(label: string): Promise<void> {
+    const target = buttons().find((button) => (button.textContent ?? '').includes(label));
+    expect(target, `no button reading "${label}"`).toBeTruthy();
+    target?.click();
+    await settle();
+  }
+
+  beforeEach(() => {
+    ceremonies = [];
+    assigned = [];
+  });
+
+  afterEach(() => http.verify());
+
+  describe('on an address that can run a ceremony', () => {
+    beforeEach(() => configure(capable()));
+
+    it('offers the passkey as the primary action and the password below it', async () => {
+      await open();
+
+      expect(page().querySelector('h1')?.textContent).toContain('Sign in');
+      expect(buttons().some((button) => button.textContent?.includes('passkey'))).toBe(true);
+      expect(buttons().some((button) => button.textContent?.includes('password'))).toBe(true);
+      expect(page().textContent).not.toContain('Passkeys need localhost');
+      http.verify();
+    });
+
+    it('will not start anything until a username is typed', async () => {
+      await open();
+
+      const passkey = buttons().find((button) => button.textContent?.includes('passkey'));
+      expect(passkey?.disabled).toBe(true);
+      http.verify();
+    });
+
+    it('runs the whole passkey flow: options, ceremony, assertion, and away', async () => {
+      await open();
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await press('passkey');
+
+      const options = http.expectOne('/idp/api/auth/login-options');
+      expect(options.request.body).toEqual({ username: 'alice' });
+      options.flush({
+        challenge: 'BAUG',
+        timeout: 300000,
+        rpId: 'localhost',
+        allowCredentials: [{ type: 'public-key', id: 'BwgJ' }],
+        userVerification: 'required',
+      });
+      await settle();
+
+      // The authenticator was asked with decoded bytes, not with the server's text.
+      expect(ceremonies).toHaveLength(1);
+      expect(Array.from(new Uint8Array(ceremonies[0].challenge as ArrayBuffer))).toEqual([4, 5, 6]);
+      expect(ceremonies[0].rpId).toBe('localhost');
+      expect(
+        Array.from(new Uint8Array(ceremonies[0].allowCredentials?.[0].id as ArrayBuffer)),
+      ).toEqual([7, 8, 9]);
+
+      const login = http.expectOne('/idp/api/auth/login');
+      expect(login.request.body).toEqual({
+        username: 'alice',
+        assertion: {
+          id: 'credential-id',
+          rawId: 'AQID',
+          type: 'public-key',
+          response: {
+            clientDataJSON: 'BAUG',
+            authenticatorData: 'BwgJ',
+            signature: 'CgsM',
+            userHandle: null,
+          },
+        },
+      });
+      login.flush(SESSION);
+      await settle();
+
+      expect(assigned).toEqual(['/']);
+    });
+
+    it('signs in with a password when that button is the one pressed', async () => {
+      await open();
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await type('input[type="password"]', 'hunter2');
+      await press('password');
+
+      const login = http.expectOne('/idp/api/auth/login');
+      expect(login.request.body).toEqual({ username: 'alice', password: 'hunter2' });
+      login.flush(SESSION);
+      await settle();
+
+      expect(assigned).toEqual(['/']);
+      expect(ceremonies).toHaveLength(0);
+    });
+
+    it('honours a same-origin redirect from the edge', async () => {
+      await open('/login?redirect=%2Fidp%2Fclients');
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await type('input[type="password"]', 'hunter2');
+      await press('password');
+      http.expectOne('/idp/api/auth/login').flush(SESSION);
+      await settle();
+
+      expect(assigned).toEqual(['/idp/clients']);
+    });
+
+    it('sends a stranger’s redirect to the front door instead', async () => {
+      await open('/login?redirect=%2F%2Fevil.example');
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await type('input[type="password"]', 'hunter2');
+      await press('password');
+      http.expectOne('/idp/api/auth/login').flush(SESSION);
+      await settle();
+
+      expect(assigned).toEqual(['/']);
+    });
+
+    it('says one calm thing on a refusal, and none of what the server said', async () => {
+      await open();
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await type('input[type="password"]', 'wrong');
+      await press('password');
+      http
+        .expectOne('/idp/api/auth/login')
+        .flush({ error: 'invalid_credentials' }, { status: 401, statusText: 'Unauthorized' });
+      await settle();
+
+      const alert = page().querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain('did not sign you in');
+      expect(page().textContent).not.toContain('invalid_credentials');
+      expect(assigned).toEqual([]);
+    });
+
+    it('blames an unreachable service rather than the person’s credential', async () => {
+      await open();
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await press('passkey');
+      http.expectOne('/idp/api/auth/login-options').flush({ challenge: 'BAUG' });
+      await settle();
+
+      // The ceremony resolved; the assertion post is what gets no answer at all.
+      http
+        .expectOne('/idp/api/auth/login')
+        .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+      await settle();
+
+      expect(page().querySelector('[role="alert"]')?.textContent).toContain('could not be reached');
+    });
+  });
+
+  describe('when the passkey prompt is dismissed', () => {
+    beforeEach(() => {
+      const browser = capable();
+      configure({
+        ...browser,
+        credentials: {
+          get: () => Promise.reject(new DOMException('cancelled', 'NotAllowedError')),
+          create: () => Promise.resolve(null),
+        } as unknown as CredentialsContainer,
+      });
+    });
+
+    it('says to try again instead of implying the username is wrong', async () => {
+      await open();
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await press('passkey');
+      http.expectOne('/idp/api/auth/login-options').flush({ challenge: 'BAUG' });
+      await settle();
+
+      expect(page().querySelector('[role="alert"]')?.textContent).toContain('dismissed');
+      expect(assigned).toEqual([]);
+    });
+  });
+
+  describe('on an address that cannot', () => {
+    beforeEach(() => configure(insecure()));
+
+    it('draws no passkey button and says in one sentence why', async () => {
+      await open();
+
+      expect(buttons().some((button) => button.textContent?.includes('passkey'))).toBe(false);
+      expect(page().textContent).toContain('Passkeys need localhost or https');
+      expect(page().textContent).toContain('A password works everywhere');
+      http.verify();
+    });
+
+    it('still signs a person in with a password', async () => {
+      await open();
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await type('input[type="password"]', 'hunter2');
+      await press('password');
+      http.expectOne('/idp/api/auth/login').flush(SESSION);
+      await settle();
+
+      expect(assigned).toEqual(['/']);
+    });
   });
 });

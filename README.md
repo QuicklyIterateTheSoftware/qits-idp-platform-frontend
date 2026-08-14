@@ -4,8 +4,8 @@ The identity provider's frontend: the two pages a person arrives at, and the two
 administers. Served by qits-platform-idp itself at `/idp/` through Quinoa. Four routes, and they
 split down the middle.
 
-- **`/idp/login`** — where a person will sign in. No platform chrome.
-- **`/idp/register`** — where a person will make an account. No platform chrome.
+- **`/idp/login`** — where a person signs in, with a passkey or a password. No platform chrome.
+- **`/idp/register`** — where a person spends a register token to make an account. No chrome.
 - **`/idp/clients`** — the clients this provider issues tokens to, inside the chrome.
 - **`/idp/users`** — the people who will hold an account, inside the chrome.
 
@@ -23,23 +23,38 @@ form to reach `/idp/clients`, is no better. `QitsMainLayout` stays an eager impo
 the pages arrive in, not a page, and a frame in its own chunk would show a blank application while
 it loaded.
 
-**All four pages are placeholders, deliberately.** This service authenticates _machines_ today: it
-issues tokens against a client id and secret, and has no user, no password and no session. So there
-is no sign-in form, no invite box and no seeded example row anywhere in this tree — a form whose
-backend does not exist is worse than a stated gap, because someone will type a real credential into
-it. What exists is the route table, the chromeless frame and the four slots, which are the parts
-that are expensive to retrofit.
+**The two auth pages are real; the two administrative ones are still placeholders.** `login` and
+`register` talk to `/idp/api/auth/*` — passkeys through `navigator.credentials`, with a password
+beside them — because that surface now exists. `clients` and `users` still draw an empty state and
+read nothing, for the reason below. The rule that kept the first two empty has not changed, it has
+been satisfied: a form is drawn once its backend answers, and not one commit sooner.
+
+**Passkeys need a secure context, and one real address does not have one.** `localhost` and
+loopback count as secure over plain http, so the ordinary `http://localhost:8080` route runs the
+ceremony with no TLS. A raw IP does not — and `http://<wsl-ip>:8080` is today's path from a
+Windows browser to this platform. Both pages check `window.isSecureContext`, draw no passkey button
+where it is false, and say so in one sentence; the password path works from everywhere and is what
+automated tests use.
+
+**Registration is gated by a token, not closed.** The platform's bootstrap mints one register token
+and prints it in its closing report. The page takes it, spends it once, and the account it makes is
+the installation's first administrator. Users are per-installation by decision, so a second
+platform starts from its own token — which is also why a passkey's binding to the relying-party id
+costs nothing here.
 
 **The client roster is blocked on authentication, not on effort.** `GET /idp/api/clients` takes a
 client's own id and secret over HTTP Basic and answers with that caller's own commissions. A
-browser has no such pair until the login flow beside it is real, and a page asking a person to paste
-a client secret would teach exactly the habit an identity provider exists to end. So the page reads
-nothing rather than reading it badly.
+browser has no such pair, and a page asking a person to paste a client secret would teach exactly
+the habit an identity provider exists to end. A session now exists to derive a caller from, but the
+listing API that would read it does not: the roster is owner-Basic today, and a
+session-authenticated read of it is named as open work in the plan rather than guessed at here. So
+the page still reads nothing rather than reading it badly.
 
-**Bare `/idp/` redirects to `/idp/clients`, and that line is provisional.** The front door should
-land on whatever the visitor is — a sign-in form when nobody is, an administrative home when
-someone is — and neither answer can be given until there is a session to ask about. Expect
-`app.routes.ts` to change when the login flow lands.
+**Bare `/idp/` redirects to `/idp/clients`, and that line is still provisional.** The front door
+should land on whatever the visitor is — a sign-in form when nobody is, an administrative home when
+someone is. The question can be asked now that sessions exist; what cannot be asked yet is whether
+the answer is this SPA's to give, since the edge is what turns an anonymous navigation into a
+`/idp/login?redirect=…` and it does that before this route table is ever consulted.
 
 Note what is _not_ under this SPA even though it shares the segment: this service's protocol surface
 sits at `/idp/token`, `/idp/jwks` and `/idp/.well-known/openid-configuration`, beside these pages
@@ -69,7 +84,14 @@ ng serve
 Then open `http://localhost:4200/`. `proxy.conf.json` forwards this service's whole surface —
 `/idp/api`, `/idp/token`, `/idp/jwks`, `/idp/.well-known` and `/idp/q` — to a gateway on
 `localhost:8080`, because `ng serve` puts no gateway in front. In a deployment every call is a
-same-origin path behind the real gateway. No page makes one of those calls yet.
+same-origin path behind the real gateway.
+
+Sign-in works against that proxy, and it works because the proxy is same-origin. The ceremony spans
+two requests and the challenge travels between them in a `_quarkus_webauthn_challenge` cookie the
+page never reads; a cross-origin arrangement would drop it and the second call would fail with
+nothing on screen to explain why. `http://localhost:4200` is a secure context in its own right, so
+passkeys run here — but the relying-party id the service is configured with must match the host the
+browser is on, or the authenticator refuses before any request is made.
 
 The platform chrome asks the gateway for `/main-navigation`, which `ng serve` does not proxy — so
 the sidebar renders "Navigation unavailable" on the two administrative pages. That is the intended
