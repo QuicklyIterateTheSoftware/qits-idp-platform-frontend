@@ -1,0 +1,31 @@
+/* The two pages that render outside the platform chrome, which is why they need a sheet of their
+   own at all: with no `QitsMainLayout` around them there is no container, no width and no padding
+   but what is written here.
+
+   A single centred column, and nothing that pretends to be a form. Both pages are placeholders
+   until the backend grows a login flow — see their doc comments — so this styles a paragraph, and
+   grows a form's rules when there is a form. */
+
+:host {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  box-sizing: border-box;
+}
+
+.card {
+  max-width: 26rem;
+  text-align: center;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+}
+
+p {
+  margin: 0.35rem 0;
+  color: #6b7280;
+}

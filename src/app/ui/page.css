@@ -1,0 +1,28 @@
+/* The furniture the two administrative pages share: a heading block and a closing note. Pulled
+   into each page component through `styleUrls` rather than into the global stylesheet, so it stays
+   scoped by Angular's emulated encapsulation and a page can still override a rule locally.
+
+   It is the sibling explorers' sheet, trimmed to what a page with no data in it uses. The table
+   rules are not copied ahead of a table: whatever `/idp/api/clients` turns out to render will bring
+   its own shape, and copying spa-mirror's columns now would be guessing at it. */
+
+:host {
+  display: block;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  overflow-wrap: anywhere;
+}
+
+.lede {
+  margin: 0.15rem 0 1rem;
+  color: #6b7280;
+}
+
+.note {
+  margin: 0.75rem 0 0;
+  color: #6b7280;
+  font-size: 0.88rem;
+}
