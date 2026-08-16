@@ -135,7 +135,7 @@ type Pending = 'passkey' | 'password' | null;
         <p class="failed" role="alert">{{ failure() }}</p>
       }
 
-      <p class="elsewhere">Already have an account? <a routerLink="/login">Sign in</a>.</p>
+      <p class="elsewhere">Already have an account? <a routerLink="/login" queryParamsHandling="preserve">Sign in</a>.</p>
     </div>
   `,
 })
@@ -182,7 +182,7 @@ export class RegisterPage {
         publicKey: toCreationOptions(options),
       });
       await this.api.register({ username, token, attestation: asAttestation(credential ?? null) });
-      this.arrive();
+      await this.arrive();
     } catch (error) {
       this.refuse(error);
     }
@@ -199,7 +199,7 @@ export class RegisterPage {
         token: this.token().trim(),
         password: this.password(),
       });
-      this.arrive();
+      await this.arrive();
     } catch (error) {
       this.refuse(error);
     }
@@ -209,8 +209,18 @@ export class RegisterPage {
    * Registered and signed in — the server's answer set the session cookie, so the account exists
    * and this browser is already holding it. `pending` stays set on the way out; see login-page.ts.
    */
-  private arrive(): void {
-    this.browser.assign(safeRedirect(this.route.snapshot.queryParamMap.get('redirect')));
+  private async arrive(): Promise<void> {
+    const params = this.route.snapshot.queryParamMap;
+    const host = params.get('return_host');
+    if (!host) {
+      this.browser.assign(safeRedirect(params.get('return_path') ?? params.get('redirect')));
+      return;
+    }
+    const target = await this.api.returnLocation(
+      host,
+      params.get('return_path') ?? safeRedirect(params.get('redirect')),
+    );
+    this.browser.assign(target.location);
   }
 
   private refuse(error: unknown): void {

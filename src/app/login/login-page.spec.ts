@@ -213,6 +213,25 @@ describe('LoginPage', () => {
       expect(assigned).toEqual(['/idp/clients']);
     });
 
+    it('asks the IdP to validate a cross-host return before leaving the canonical login origin', async () => {
+      await open('/login?return_host=prod.wohlben.eu&return_path=%2Fprojects%2F7%3Ftab%3Druns');
+      await type('input[autocomplete="username webauthn"]', 'alice');
+      await type('input[type="password"]', 'hunter2');
+      await press('password');
+      http.expectOne('/idp/api/auth/login').flush(SESSION);
+      await settle();
+      const destination = http.expectOne(
+        (request) =>
+          request.url === '/idp/api/auth/return-location' &&
+          request.params.get('return_host') === 'prod.wohlben.eu' &&
+          request.params.get('return_path') === '/projects/7?tab=runs',
+      );
+      destination.flush({ location: 'https://prod.wohlben.eu/projects/7?tab=runs' });
+      await settle();
+
+      expect(assigned).toEqual(['https://prod.wohlben.eu/projects/7?tab=runs']);
+    });
+
     it('sends a stranger’s redirect to the front door instead', async () => {
       await open('/login?redirect=%2F%2Fevil.example');
       await type('input[autocomplete="username webauthn"]', 'alice');

@@ -28,12 +28,10 @@ type Pending = 'passkey' | 'password' | null;
  * explanation. `window.isSecureContext` is checked instead and the passkey button is not drawn,
  * with one plain sentence saying why. Automated tests take the same door for their own reason.
  *
- * **Success leaves the application entirely.** `?redirect=` comes from the edge, which appends it
- * when it turns an anonymous navigation away, and the destination is almost never a page in *this*
- * SPA — it is spa-home, or projects, or whichever service the person was aiming at behind the same
- * gateway. A router hop cannot go there, so this is a full document navigation. The parameter is
- * sanitized first and hard: see `auth/redirect.ts` for why an open redirect on a sign-in page is
- * the one bug on this route that a stranger can aim.
+ * **Success leaves the application entirely.** The edge sends `return_host` and `return_path` when
+ * it turns an anonymous navigation away. The IdP, not this public SPA, validates that host against
+ * its configured browser-host allow-list and returns the complete location. A router hop cannot go
+ * there, so this is a full document navigation.
  *
  * **There is a `<form>` element, and it never submits.** The sibling explorers build forms out of
  * labelled fields and a `qits-button` with no `<form>` around them, and that shape is wrong on this
@@ -123,7 +121,7 @@ type Pending = 'passkey' | 'password' | null;
       }
 
       <p class="elsewhere">
-        No account yet? <a routerLink="/register">Register with a token</a>.
+        No account yet? <a routerLink="/register" queryParamsHandling="preserve">Register with a token</a>.
       </p>
     </div>
   `,
@@ -167,7 +165,7 @@ export class LoginPage {
         publicKey: toRequestOptions(options),
       });
       await this.api.login({ username, assertion: asAssertion(credential ?? null) });
-      this.arrive();
+      await this.arrive();
     } catch (error) {
       this.refuse(error);
     }
@@ -180,7 +178,7 @@ export class LoginPage {
     this.failure.set(null);
     try {
       await this.api.login({ username: this.username().trim(), password: this.password() });
-      this.arrive();
+      await this.arrive();
     } catch (error) {
       this.refuse(error);
     }
@@ -190,8 +188,22 @@ export class LoginPage {
    * Gone. `pending` is deliberately left standing: the document is on its way out, and clearing it
    * would flicker the buttons back to life for however long the next page takes to arrive.
    */
-  private arrive(): void {
-    this.browser.assign(safeRedirect(this.route.snapshot.queryParamMap.get('redirect')));
+  private async arrive(): Promise<void> {
+    const params = this.route.snapshot.queryParamMap;
+    const host = params.get('return_host');
+    if (!host) {
+      // A bookmark made before domain SSO used the same-origin spelling. It stays a local path and
+      // is still rejected by the old, deliberately tiny guard.
+      this.browser.assign(safeRedirect(params.get('return_path') ?? params.get('redirect')));
+      return;
+    }
+    // `redirect` is the legacy same-origin spelling; preserving it makes an already-bookmarked
+    // local login link safe while every cross-host return takes the IdP's allow-listed path.
+    const target = await this.api.returnLocation(
+      host,
+      params.get('return_path') ?? safeRedirect(params.get('redirect')),
+    );
+    this.browser.assign(target.location);
   }
 
   private refuse(error: unknown): void {

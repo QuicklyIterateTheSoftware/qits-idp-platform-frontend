@@ -21,6 +21,11 @@ export interface AuthSession {
   readonly expiresAt: string;
 }
 
+/** The server-validated document location to use after a successful browser ceremony. */
+export interface ReturnLocation {
+  readonly location: string;
+}
+
 /** One acceptable key type, as the server offers it (`alg` is a COSE identifier). */
 export interface CredentialParameterJson {
   readonly type: string;

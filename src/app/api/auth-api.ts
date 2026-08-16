@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { QITS_API_BASE } from './api-base';
@@ -7,6 +7,7 @@ import type {
   CreationOptionsJson,
   LoginRequest,
   RegisterRequest,
+  ReturnLocation,
   RequestOptionsJson,
 } from './dto';
 
@@ -62,5 +63,19 @@ export class AuthApi {
   /** Finish a sign-in with an assertion or a password. Sets the session cookie. */
   login(request: LoginRequest): Promise<AuthSession> {
     return firstValueFrom(this.http.post<AuthSession>(`${this.base}/idp/api/auth/login`, request));
+  }
+
+  /**
+   * The only redirect location a public auth page may use. The IdP compares the supplied authority
+   * with its explicit browser-host allow-list, so a hand-written login URL cannot become an open
+   * redirect even though its query parameters are public input.
+   */
+  returnLocation(host: string | null, path: string | null): Promise<ReturnLocation> {
+    const params = new HttpParams()
+      .set('return_host', host ?? '')
+      .set('return_path', path ?? '');
+    return firstValueFrom(
+      this.http.get<ReturnLocation>(`${this.base}/idp/api/auth/return-location`, { params }),
+    );
   }
 }

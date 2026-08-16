@@ -221,6 +221,26 @@ describe('RegisterPage', () => {
       expect(assigned).toEqual(['/idp/clients']);
     });
 
+    it('asks the IdP to validate a cross-host return after registration', async () => {
+      await open('/register?return_host=prod.wohlben.eu&return_path=%2Fprojects');
+      await fillIdentity();
+      await type('input[type="password"]', 'hunter2');
+      await press('password');
+      http.expectOne('/idp/api/auth/register').flush(SESSION);
+      await settle();
+      http
+        .expectOne(
+          (request) =>
+            request.url === '/idp/api/auth/return-location' &&
+            request.params.get('return_host') === 'prod.wohlben.eu' &&
+            request.params.get('return_path') === '/projects',
+        )
+        .flush({ location: 'https://prod.wohlben.eu/projects' });
+      await settle();
+
+      expect(assigned).toEqual(['https://prod.wohlben.eu/projects']);
+    });
+
     it('says one calm thing on a spent token, and nothing the server said', async () => {
       await open();
       await fillIdentity();
