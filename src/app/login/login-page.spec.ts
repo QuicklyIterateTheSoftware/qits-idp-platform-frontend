@@ -89,6 +89,21 @@ describe('LoginPage', () => {
     }
   }
 
+  /**
+   * Answer the landing lookup a targetless login now makes: the IdP is asked with no host and no
+   * path, and names the installation's front door.
+   */
+  async function landing(): Promise<void> {
+    const destination = http.expectOne(
+      (request) =>
+        request.url === '/idp/api/auth/return-location' &&
+        request.params.get('return_host') === '' &&
+        request.params.get('return_path') === '',
+    );
+    destination.flush({ location: 'https://wohlben.eu/' });
+    await settle();
+  }
+
   function page(): HTMLElement {
     return harness.fixture.nativeElement as HTMLElement;
   }
@@ -183,8 +198,9 @@ describe('LoginPage', () => {
       });
       login.flush(SESSION);
       await settle();
+      await landing();
 
-      expect(assigned).toEqual(['/']);
+      expect(assigned).toEqual(['https://wohlben.eu/']);
     });
 
     it('signs in with a password when that button is the one pressed', async () => {
@@ -197,8 +213,9 @@ describe('LoginPage', () => {
       expect(login.request.body).toEqual({ username: 'alice', password: 'hunter2' });
       login.flush(SESSION);
       await settle();
+      await landing();
 
-      expect(assigned).toEqual(['/']);
+      expect(assigned).toEqual(['https://wohlben.eu/']);
       expect(ceremonies).toHaveLength(0);
     });
 
@@ -239,8 +256,9 @@ describe('LoginPage', () => {
       await press('password');
       http.expectOne('/idp/api/auth/login').flush(SESSION);
       await settle();
+      await landing();
 
-      expect(assigned).toEqual(['/']);
+      expect(assigned).toEqual(['https://wohlben.eu/']);
     });
 
     it('says one calm thing on a refusal, and none of what the server said', async () => {
@@ -319,8 +337,9 @@ describe('LoginPage', () => {
       await press('password');
       http.expectOne('/idp/api/auth/login').flush(SESSION);
       await settle();
+      await landing();
 
-      expect(assigned).toEqual(['/']);
+      expect(assigned).toEqual(['https://wohlben.eu/']);
     });
   });
 });
