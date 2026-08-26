@@ -4,7 +4,7 @@ import { QitsButton } from '@qits/ui-components';
 import { AuthApi } from '../api/auth-api';
 import { AUTH_BROWSER } from '../auth/browser';
 import { authFailure } from '../auth/failure';
-import { safeRedirect } from '../auth/redirect';
+import { DEFAULT_REDIRECT, safeRedirect } from '../auth/redirect';
 import { asAttestation, toCreationOptions } from '../auth/webauthn';
 
 /** Which action is in flight, or `null` when none is. Two buttons, one at a time. */
@@ -213,12 +213,17 @@ export class RegisterPage {
     const params = this.route.snapshot.queryParamMap;
     const host = params.get('return_host');
     if (!host) {
-      this.browser.assign(safeRedirect(params.get('return_path') ?? params.get('redirect')));
-      return;
+      // Same shape as login-page.ts: a plainly local path is honoured, everything else asks the
+      // IdP for the installation's landing location — `/` here is the IdP's own SPA now.
+      const local = safeRedirect(params.get('return_path') ?? params.get('redirect'));
+      if (local !== DEFAULT_REDIRECT) {
+        this.browser.assign(local);
+        return;
+      }
     }
     const target = await this.api.returnLocation(
       host,
-      params.get('return_path') ?? safeRedirect(params.get('redirect')),
+      host ? (params.get('return_path') ?? safeRedirect(params.get('redirect'))) : null,
     );
     this.browser.assign(target.location);
   }

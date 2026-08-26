@@ -82,6 +82,18 @@ describe('RegisterPage', () => {
     }
   }
 
+  /** Answer the landing lookup a targetless registration makes; see login-page.spec.ts. */
+  async function landing(): Promise<void> {
+    const destination = http.expectOne(
+      (request) =>
+        request.url === '/idp/api/auth/return-location' &&
+        request.params.get('return_host') === '' &&
+        request.params.get('return_path') === '',
+    );
+    destination.flush({ location: 'https://wohlben.eu/' });
+    await settle();
+  }
+
   function page(): HTMLElement {
     return harness.fixture.nativeElement as HTMLElement;
   }
@@ -187,8 +199,9 @@ describe('RegisterPage', () => {
       });
       register.flush(SESSION);
       await settle();
+      await landing();
 
-      expect(assigned).toEqual(['/']);
+      expect(assigned).toEqual(['https://wohlben.eu/']);
     });
 
     it('registers with a password instead when that button is pressed', async () => {
@@ -205,8 +218,9 @@ describe('RegisterPage', () => {
       });
       register.flush(SESSION);
       await settle();
+      await landing();
 
-      expect(assigned).toEqual(['/']);
+      expect(assigned).toEqual(['https://wohlben.eu/']);
       expect(ceremonies).toHaveLength(0);
     });
 
@@ -277,8 +291,9 @@ describe('RegisterPage', () => {
       await press('password');
       http.expectOne('/idp/api/auth/register').flush(SESSION);
       await settle();
+      await landing();
 
-      expect(assigned).toEqual(['/']);
+      expect(assigned).toEqual(['https://wohlben.eu/']);
     });
   });
 });

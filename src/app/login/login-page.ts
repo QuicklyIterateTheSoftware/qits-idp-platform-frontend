@@ -4,7 +4,7 @@ import { QitsButton } from '@qits/ui-components';
 import { AuthApi } from '../api/auth-api';
 import { AUTH_BROWSER } from '../auth/browser';
 import { authFailure } from '../auth/failure';
-import { safeRedirect } from '../auth/redirect';
+import { DEFAULT_REDIRECT, safeRedirect } from '../auth/redirect';
 import { asAssertion, toRequestOptions } from '../auth/webauthn';
 
 /** Which action is in flight, or `null` when none is. Two buttons, one at a time. */
@@ -31,7 +31,10 @@ type Pending = 'passkey' | 'password' | null;
  * **Success leaves the application entirely.** The edge sends `return_host` and `return_path` when
  * it turns an anonymous navigation away. The IdP, not this public SPA, validates that host against
  * its configured browser-host allow-list and returns the complete location. A router hop cannot go
- * there, so this is a full document navigation.
+ * there, so this is a full document navigation. A login with no return target at all — a typed
+ * address, a password manager's saved login URL — asks the same endpoint and gets the
+ * installation's landing location, because `/` on this origin is the IdP's own SPA rather than the
+ * platform.
  *
  * **There is a `<form>` element, and it never submits.** The sibling explorers build forms out of
  * labelled fields and a `qits-button` with no `<form>` around them, and that shape is wrong on this
@@ -192,16 +195,22 @@ export class LoginPage {
     const params = this.route.snapshot.queryParamMap;
     const host = params.get('return_host');
     if (!host) {
-      // A bookmark made before domain SSO used the same-origin spelling. It stays a local path and
-      // is still rejected by the old, deliberately tiny guard.
-      this.browser.assign(safeRedirect(params.get('return_path') ?? params.get('redirect')));
-      return;
+      // A bookmark made before domain SSO used the same-origin spelling. A plainly local path is
+      // still honoured on this origin, guarded by the old, deliberately tiny check. Anything the
+      // guard refuses — and a login with no target at all — falls through to the IdP: since the
+      // login moved onto its own host, `/` here is the IdP's SPA rather than the platform, so the
+      // server names the installation's landing location instead.
+      const local = safeRedirect(params.get('return_path') ?? params.get('redirect'));
+      if (local !== DEFAULT_REDIRECT) {
+        this.browser.assign(local);
+        return;
+      }
     }
     // `redirect` is the legacy same-origin spelling; preserving it makes an already-bookmarked
     // local login link safe while every cross-host return takes the IdP's allow-listed path.
     const target = await this.api.returnLocation(
       host,
-      params.get('return_path') ?? safeRedirect(params.get('redirect')),
+      host ? (params.get('return_path') ?? safeRedirect(params.get('redirect'))) : null,
     );
     this.browser.assign(target.location);
   }
