@@ -1,4 +1,4 @@
-# QitsPlatformSpaIdp
+# qits-idp-platform-frontend
 
 The identity provider's frontend: the two pages a person arrives at, and the two an operator
 administers. Served by qits-platform-idp itself at `/idp/` through Quinoa. Four routes, and they
@@ -63,10 +63,11 @@ application.
 
 ## How it is served
 
-qits-platform-idp carries this repository as a git submodule at `service/src/main/webui` — Quinoa's
-`web-ui-dir` — and builds it during `mvn package`, serving the bundle at `/idp/`. The segment is
-spelled here as `baseHref` in `angular.json` and there as `quarkus.quinoa.ui-root-path`; the two
-move together. This repository ships no container image of its own.
+qits-idp-platform-service carries this repository as a git submodule at `service/src/main/webui` —
+Quinoa's `web-ui-dir` — and builds it during `mvn package`, serving the bundle at `/idp/`. The
+segment is spelled here as `baseHref` in `angular.json` and there as
+`quarkus.quinoa.ui-root-path`; the two move together. This repository ships no container image of
+its own.
 
 That mount is the arrangement this repo is built for, and it does not exist yet: the service
 declares no Quinoa and carries no webui submodule at the time of writing. Nothing here waits on it —
