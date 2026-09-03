@@ -1,6 +1,6 @@
 {
   "name": "qits-platform-spa-idp",
-  "version": "2026.826.92047",
+  "version": "2026.903.43611",
   "private": true,
   "description": "The identity provider's frontend: an Angular application that consumes @qits/ui-components from qits' own npm registry. It ships no image — qits-platform-idp serves it via Quinoa at /idp/.",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "@angular/forms": "^21.2.0",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
-    "@qits/ui-components": "^2026.807.122825",
+    "@qits/ui-components": "^2026.902.204627",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
