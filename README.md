@@ -104,7 +104,9 @@ degraded state, not a fault. The two auth pages mount no chrome and are unaffect
 npm run lint && npm test && npm run build
 ```
 
-The same three, in the same order, are what `.config/qits/ci-post-receive.yml` runs on every push.
+The same three, in the same order, are what `.config/qits/ci-event-release-request.yml` runs — once
+per release request, on the folded `release/<id>` branch, with its verdict gating the release.
+Nothing builds on a push any more.
 Note what that pipeline installs from: the npm proxy behind it is qits-platform-mirror, and the
 `@qits` scope comes from qits-artifacts — so a run here cannot be green while either service is
 down. Their deploys are taken alone, with the CI queue empty.
