@@ -17,7 +17,7 @@ describe('AuthApi', () => {
   const SESSION: AuthSession = {
     userId: '3f9b3f1e-0000-4000-8000-000000000001',
     username: 'alice',
-    roles: ['qits-platform:admin', 'qits:admin'],
+    roles: ['qits:admin'],
     expiresAt: '2026-08-15T06:00:00Z',
   };
 
