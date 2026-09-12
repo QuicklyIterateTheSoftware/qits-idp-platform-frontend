@@ -3,9 +3,10 @@ import { QitsMainLayout } from '@qits/ui-components';
 import { NotFound } from './not-found/not-found';
 
 /**
- * Four doors: two that sign a person in, and two that administer what they sign in to.
+ * Six doors: three outside the platform chrome, three inside it.
  *
- * **`login` and `register` sit outside the layout, and that is the shape rather than an oversight.**
+ * **`login`, `register` and `connect/cli` sit outside the layout, and that is the shape rather than
+ * an oversight.**
  * An auth page renders no platform chrome: a sidebar full of links to services the visitor has not
  * been admitted to is an invitation to click something that will refuse them, and a top bar that
  * says who is signed in is a lie on the page where nobody is. So the two of them are top-level
@@ -48,6 +49,10 @@ export const routes: Routes = [
     loadComponent: () => import('./register/register-page').then((m) => m.RegisterPage),
   },
   {
+    path: 'connect/cli',
+    loadComponent: () => import('./connect/cli-page').then((m) => m.CliPage),
+  },
+  {
     path: '',
     component: QitsMainLayout,
     children: [
@@ -59,6 +64,10 @@ export const routes: Routes = [
       {
         path: 'users',
         loadComponent: () => import('./users/users-page').then((m) => m.UsersPage),
+      },
+      {
+        path: 'devices',
+        loadComponent: () => import('./devices/devices-page').then((m) => m.DevicesPage),
       },
       { path: '**', component: NotFound },
     ],

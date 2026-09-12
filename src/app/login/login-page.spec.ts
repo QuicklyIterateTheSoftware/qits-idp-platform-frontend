@@ -56,12 +56,18 @@ describe('LoginPage', () => {
         create: () => Promise.resolve(null),
       } as unknown as CredentialsContainer,
       assign: (url: string) => assigned.push(url),
+      copy: () => Promise.resolve(true),
     };
   }
 
   /** The raw-IP route: no secure context, so no `navigator.credentials` at all. */
   function insecure(): AuthBrowser {
-    return { secureContext: false, credentials: null, assign: (url) => assigned.push(url) };
+    return {
+      secureContext: false,
+      credentials: null,
+      assign: (url) => assigned.push(url),
+      copy: () => Promise.resolve(true),
+    };
   }
 
   function configure(browser: AuthBrowser): void {

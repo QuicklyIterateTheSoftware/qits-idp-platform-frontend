@@ -108,3 +108,20 @@ export interface LoginRequest {
   readonly assertion?: AssertionJson;
   readonly password?: string;
 }
+
+/**
+ * One signed-in device: a revocable credential family this account holds, CLI or Git workstation.
+ *
+ * `kind` is the server's word, not a mapping this application makes from `clientId`. The client ids
+ * are a deployment's configuration, so a page that matched on the string `qits-cli` would mislabel
+ * an installation that renamed one; `unknown` is what a family whose client is no longer configured
+ * reports, and it is still revocable.
+ */
+export interface Device {
+  readonly id: string;
+  readonly clientId: string;
+  readonly kind: 'cli' | 'workstation' | 'unknown';
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly revokedAt: string | null;
+}

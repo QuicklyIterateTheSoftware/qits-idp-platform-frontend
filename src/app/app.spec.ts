@@ -19,11 +19,12 @@ const NAV = [
 ] as const;
 
 /**
- * The shell owns one thing — the outlet — so that is what is asserted here, plus the route table
- * putting each of the four doors on the right side of the chrome.
+ * The shell owns two things — the outlet and the chrome's sub-menu — so that is what is asserted
+ * here, plus the route table putting each of the six doors on the right side of the chrome.
  *
  * That last part is this app's one structural rule and the only one worth a spec: the
- * administrative pages are inside `QitsMainLayout` and the two auth pages are **not**. It is a
+ * administrative pages are inside `QitsMainLayout` and the three public ones — sign in, register,
+ * and the CLI code page — are **not**. It is a
  * property no page can assert about itself, it is invisible on screen until someone is looking at
  * a sign-in form wrapped in a sidebar, and it is a two-character edit away in the route table.
  *
@@ -48,13 +49,17 @@ describe('App', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  it('is an outlet and nothing else', async () => {
+  it('is an outlet and a handed-over sub-menu, and nothing else', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
 
     const shell = fixture.nativeElement as HTMLElement;
     expect(shell.querySelector('router-outlet')).not.toBeNull();
     expect(shell.querySelector('h1')).toBeNull();
+    // The sub-menu is an <ng-template>: declared here, rendered by the layout somewhere else. It
+    // must draw nothing at this level, or it would appear above every route including the auth
+    // pages that have no chrome at all.
+    expect(shell.querySelector('app-view-nav')).toBeNull();
   });
 
   it('sends the base path to the clients, inside the chrome', async () => {
@@ -73,6 +78,17 @@ describe('App', () => {
 
     expect(layout.tagName.toLowerCase()).toBe('qits-main-layout');
     expect(layout.querySelector('main app-users-page')).not.toBeNull();
+    http.verify();
+  });
+
+  it('routes /devices to the devices page, inside the chrome', async () => {
+    const harness = await RouterTestingHarness.create('/devices');
+    const layout = harness.routeNativeElement as HTMLElement;
+
+    expect(layout.tagName.toLowerCase()).toBe('qits-main-layout');
+    expect(layout.querySelector('main app-devices-page')).not.toBeNull();
+    // The page reads its own listing on arrival; answering it here keeps `verify` about the chrome.
+    http.expectOne('/idp/api/devices').flush([]);
     http.verify();
   });
 
@@ -95,6 +111,19 @@ describe('App', () => {
     expect((harness.fixture.nativeElement as HTMLElement).querySelector('qits-main-layout')).toBe(
       null,
     );
+    http.verify();
+  });
+
+  it('draws the CLI code page with no chrome, and asks nobody for anything', async () => {
+    const harness = await RouterTestingHarness.create('/connect/cli?code=abc123');
+    const page = harness.routeNativeElement as HTMLElement;
+
+    expect(page.tagName.toLowerCase()).toBe('app-cli-page');
+    const shell = harness.fixture.nativeElement as HTMLElement;
+    expect(shell.querySelector('qits-main-layout')).toBeNull();
+    // The strong one: this document's URL held a credential a moment ago, so it makes no request
+    // that could carry it anywhere — the chrome's own /main-navigation call included, which the
+    // route table keeps away by putting this page outside the layout.
     http.verify();
   });
 

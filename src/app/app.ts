@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { QitsNavSubmenu } from '@qits/ui-components';
+import { ViewNav } from './nav/view-nav';
 
 /**
  * The shell, and deliberately nothing else. The chrome the admin pages are seen through — the
@@ -13,14 +15,22 @@ import { RouterOutlet } from '@angular/router';
  * away — and it would appear on the sign-in page, which is the one page on this platform that must
  * show nothing but itself.
  *
- * Nor does this app offer the chrome a sub-menu the way spa-mirror does. Its two doors that live
- * inside the layout are administrative, and the auth pages must not be listed beside them; when a
- * sub-menu earns its place it belongs here, in the shell, not in a page.
+ * **The sub-menu is here now, and the reason it was not before is the reason it is.** Its earlier
+ * absence was argued from the auth pages: they must not be listed beside the administrative doors.
+ * They still are not — they render outside `QitsMainLayout` and the sub-menu only renders inside it
+ * — and the administrative doors grew a third, `devices`, which is where a person ends a session
+ * they no longer trust. That is not a page to reach by typing a URL. It is declared in the shell
+ * and not in a page for the correctness reason `QitsNavSubmenu` documents: `RouterOutlet` destroys
+ * the outgoing component after creating the incoming one, so a declaration inside a page is torn
+ * down and rebuilt on every hop, in a menu that did not itself change.
  */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet],
-  template: '<router-outlet />',
+  imports: [RouterOutlet, QitsNavSubmenu, ViewNav],
+  template: `
+    <ng-template qitsNavSubmenu><app-view-nav /></ng-template>
+    <router-outlet />
+  `,
 })
 export class App {}
